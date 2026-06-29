@@ -28,6 +28,16 @@ $app->get('/api/planio/status', function (Request $request, Response $response):
     }
 });
 
+function mapPlanioStatus(string $planioStatus): string
+{
+    return match (strtolower(trim($planioStatus))) {
+        'in progress' => 'in_progress',
+        'feedback'    => 'awaiting_feedback',
+        'resolved', 'closed', 'done', 'rejected' => 'done',
+        default       => 'new',
+    };
+}
+
 $app->get('/api/planio/sync', function (Request $request, Response $response): Response {
     try {
         $db     = Database::get();
@@ -36,24 +46,35 @@ $app->get('/api/planio/sync', function (Request $request, Response $response): R
         $updated = 0;
 
         foreach ($issues as $issue) {
-            $planioId = $issue['id'];
-            $title    = $issue['subject'] ?? '';
-            $project  = $issue['project']['name'] ?? null;
-            $dueDate  = $issue['due_date'] ?? null;
-            $requester = $issue['author']['name'] ?? null;
+            $planioId      = $issue['id'];
+            $title         = 'RM' . $planioId . ' - ' . ($issue['subject'] ?? '');
+            $project       = $issue['project']['name'] ?? null;
+            $dueDate       = $issue['due_date'] ?? null;
+            $requester     = $issue['author']['name'] ?? null;
+            $planioStatus  = $issue['status']['name'] ?? 'new';
+            $mappedStatus  = mapPlanioStatus($planioStatus);
 
-            $existing = $db->prepare('SELECT id FROM tasks WHERE planio_issue_id = ?');
+            $existing = $db->prepare('SELECT id, status FROM tasks WHERE planio_issue_id = ?');
             $existing->execute([$planioId]);
+            $row = $existing->fetch(\PDO::FETCH_ASSOC);
 
-            if ($existing->fetch()) {
-                $db->prepare(
-                    'UPDATE tasks SET title = ?, project = ?, due_date = ? WHERE planio_issue_id = ?'
-                )->execute([$title, $project, $dueDate, $planioId]);
+            if ($row) {
+                // Update title/project/due_date always; sync status only when still at 'new'
+                // (preserves developer-owned states like awaiting_feedback)
+                if ($row['status'] === 'new') {
+                    $db->prepare(
+                        'UPDATE tasks SET title = ?, project = ?, due_date = ?, status = ? WHERE planio_issue_id = ?'
+                    )->execute([$title, $project, $dueDate, $mappedStatus, $planioId]);
+                } else {
+                    $db->prepare(
+                        'UPDATE tasks SET title = ?, project = ?, due_date = ? WHERE planio_issue_id = ?'
+                    )->execute([$title, $project, $dueDate, $planioId]);
+                }
                 $updated++;
             } else {
                 $db->prepare(
-                    'INSERT INTO tasks (planio_issue_id, title, project, requester, due_date, status) VALUES (?, ?, ?, ?, ?, \'new\')'
-                )->execute([$planioId, $title, $project, $requester, $dueDate]);
+                    'INSERT INTO tasks (planio_issue_id, title, project, requester, due_date, status) VALUES (?, ?, ?, ?, ?, ?)'
+                )->execute([$planioId, $title, $project, $requester, $dueDate, $mappedStatus]);
                 $new++;
             }
         }
