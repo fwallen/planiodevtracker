@@ -31,10 +31,9 @@ $app->get('/api/planio/status', function (Request $request, Response $response):
 function mapPlanioStatus(string $planioStatus): string
 {
     return match (strtolower(trim($planioStatus))) {
-        'in progress' => 'in_progress',
-        'feedback'    => 'awaiting_feedback',
+        'in progress', 'feedback' => 'in_progress',
         'resolved', 'closed', 'done', 'rejected' => 'done',
-        default       => 'new',
+        default => 'new',
     };
 }
 
