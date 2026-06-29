@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Task Tracker</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#4f46e5', light: '#818cf8', dark: '#3730a3' }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- Our scripts must register before Alpine fires alpine:init -->
+  <script src="/js/api.js"></script>
+  <script src="/js/store.js"></script>
+  <script src="/js/board.js"></script>
+  <script src="/js/taskCard.js"></script>
+  <script src="/js/settings.js"></script>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
+</head>
+
+<body class="h-full bg-gray-100 text-gray-800" x-data x-init="$store.tasks.load()">
+
+  <!-- Header -->
+  <header class="bg-brand text-white shadow-md">
+    <div class="max-w-screen-2xl mx-auto px-4 py-3 flex items-center gap-4">
+      <h1 class="text-lg font-semibold tracking-tight flex-1">Dev Task Tracker</h1>
+
+      <!-- View toggle -->
+      <nav class="flex gap-1 text-sm">
+        <button
+          @click="$store.tasks.view = 'board'"
+          :class="$store.tasks.view === 'board' ? 'bg-brand-dark' : 'hover:bg-brand-dark/60'"
+          class="px-3 py-1.5 rounded transition">Board</button>
+        <button
+          @click="$store.tasks.view = 'myday'"
+          :class="$store.tasks.view === 'myday' ? 'bg-brand-dark' : 'hover:bg-brand-dark/60'"
+          class="px-3 py-1.5 rounded transition">My Day</button>
+      </nav>
+
+      <!-- Sync Plan.io -->
+      <button
+        @click="$store.tasks.sync()"
+        :disabled="$store.tasks.syncing"
+        class="text-sm px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded transition disabled:opacity-50">
+        <span x-text="$store.tasks.syncing ? 'Syncing…' : 'Sync Plan.io'"></span>
+      </button>
+
+      <!-- Settings -->
+      <button
+        @click="$store.tasks.settingsOpen = true"
+        class="p-1.5 hover:bg-white/20 rounded transition" title="Settings">
+        ⚙
+      </button>
+    </div>
+
+    <!-- Quick-add bar -->
+    <div class="max-w-screen-2xl mx-auto px-4 pb-3">
+      <form @submit.prevent="$store.tasks.quickAdd($el.querySelector('input'))" class="flex gap-2">
+        <input
+          type="text"
+          placeholder="Add a task… press Enter"
+          class="flex-1 rounded px-3 py-1.5 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-brand-light" />
+        <button type="submit" class="text-sm px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded transition">Add</button>
+      </form>
+    </div>
+  </header>
+
+  <!-- Sync result flash -->
+  <div
+    x-show="$store.tasks.syncMsg"
+    x-transition.opacity
+    class="max-w-screen-2xl mx-auto px-4 pt-2">
+    <div class="bg-green-100 border border-green-300 text-green-800 rounded px-3 py-2 text-sm"
+         x-text="$store.tasks.syncMsg"></div>
+  </div>
+
+  <!-- Board View -->
+  <main x-show="$store.tasks.view === 'board'" class="max-w-screen-2xl mx-auto px-4 py-4">
+    <div x-data="boardComponent()" x-init="init()" class="flex gap-4 overflow-x-auto pb-4">
+      <template x-for="col in columns" :key="col.status">
+        <div class="flex-shrink-0 w-72 bg-white rounded-lg shadow-sm flex flex-col">
+          <div class="px-3 py-2 border-b border-gray-100 font-medium text-sm flex items-center justify-between">
+            <span x-text="col.label"></span>
+            <span class="text-xs text-gray-400 font-normal"
+                  x-text="tasksFor(col.status).length"></span>
+          </div>
+          <div class="p-2 flex flex-col gap-2 flex-1 min-h-[120px]">
+            <template x-for="task in tasksFor(col.status)" :key="task.id">
+              <div x-data="taskCard(task)" @click="open()" class="task-card cursor-pointer">
+                <!-- Card markup injected by taskCard component -->
+                <div :class="cardClass()" class="rounded-md border p-2.5 hover:shadow transition text-sm">
+                  <div class="font-medium leading-snug mb-1" x-text="task.title"></div>
+                  <div class="flex items-center gap-2 text-xs text-gray-400">
+                    <span x-show="task.project" x-text="task.project"></span>
+                    <span x-show="task.requester" x-text="'← ' + task.requester"></span>
+                  </div>
+                  <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
+                    <span x-text="daysInStatus() + 'd'"></span>
+                    <span x-show="task.feedback_rounds > 0"
+                          class="bg-amber-100 text-amber-700 px-1 rounded font-medium"
+                          x-text="'×' + task.feedback_rounds"></span>
+                    <a x-show="task.planio_issue_id"
+                       :href="planioUrl()"
+                       @click.stop
+                       target="_blank"
+                       class="ml-auto text-brand hover:underline">P</a>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+  </main>
+
+  <!-- My Day View -->
+  <main x-show="$store.tasks.view === 'myday'" class="max-w-screen-2xl mx-auto px-4 py-4">
+    <div x-data="boardComponent()" x-init="init()">
+      <h2 class="text-sm font-medium text-gray-500 mb-3">In progress or feedback received — sorted by due date</h2>
+      <div class="flex flex-col gap-2 max-w-2xl">
+        <template x-for="task in myDayTasks()" :key="task.id">
+          <div x-data="taskCard(task)" @click="open()" class="task-card cursor-pointer">
+            <div :class="cardClass()" class="rounded-md border bg-white p-3 hover:shadow transition text-sm flex items-center gap-3">
+              <div class="flex-1">
+                <div class="font-medium" x-text="task.title"></div>
+                <div class="text-xs text-gray-400 mt-0.5" x-text="[task.project, task.requester ? '← ' + task.requester : null].filter(Boolean).join(' · ')"></div>
+              </div>
+              <div class="text-xs text-gray-400 whitespace-nowrap" x-text="task.due_date ?? ''"></div>
+              <div class="text-xs px-1.5 py-0.5 rounded capitalize"
+                   :class="task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'"
+                   x-text="task.status.replace('_', ' ')"></div>
+            </div>
+          </div>
+        </template>
+        <p x-show="myDayTasks().length === 0" class="text-sm text-gray-400">Nothing in progress today.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Detail Panel (slide-out) -->
+  <div x-show="$store.tasks.detail" @keydown.escape.window="$store.tasks.detail = null"
+       class="fixed inset-0 z-40 flex" style="display:none">
+    <div class="flex-1 bg-black/30" @click="$store.tasks.detail = null"></div>
+    <div x-data="detailPanel()" x-init="init()"
+         class="w-96 bg-white shadow-xl flex flex-col overflow-y-auto">
+
+      <div class="px-4 py-3 border-b flex items-center justify-between">
+        <span class="font-semibold" x-text="task().title"></span>
+        <button @click="$store.tasks.detail = null" class="text-gray-400 hover:text-gray-700">✕</button>
+      </div>
+
+      <div class="px-4 py-3 flex-1 flex flex-col gap-4">
+
+        <!-- Status buttons -->
+        <div>
+          <div class="text-xs text-gray-400 mb-1.5 uppercase tracking-wide">Status</div>
+          <div class="flex flex-wrap gap-1.5">
+            <template x-for="s in statuses" :key="s.value">
+              <button
+                @click="setStatus(s.value)"
+                :class="task().status === s.value ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                class="text-xs px-2.5 py-1 rounded transition"
+                x-text="s.label"></button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Send for Feedback -->
+        <div x-show="['in_progress','feedback_received'].includes(task().status)">
+          <div class="text-xs text-gray-400 mb-1 uppercase tracking-wide">Send for Feedback</div>
+          <textarea x-model="feedbackNote" rows="2"
+                    placeholder="Optional note…"
+                    class="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand resize-none mb-1.5"></textarea>
+          <button @click="sendFeedback()"
+                  class="text-sm px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded transition">
+            Send for Feedback
+          </button>
+        </div>
+
+        <!-- Got Feedback -->
+        <div x-show="task().status === 'awaiting_feedback'">
+          <button @click="gotFeedback()"
+                  class="text-sm px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded transition">
+            Mark Feedback Received
+          </button>
+        </div>
+
+        <!-- Notes -->
+        <div>
+          <div class="text-xs text-gray-400 mb-1 uppercase tracking-wide">Notes</div>
+          <textarea x-model="notes" @blur="saveNotes()" rows="4"
+                    class="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand resize-none"
+                    placeholder="Notes…"></textarea>
+        </div>
+
+        <!-- Feedback log -->
+        <div x-show="task().feedback_log && task().feedback_log.length">
+          <div class="text-xs text-gray-400 mb-1.5 uppercase tracking-wide">Feedback History</div>
+          <ul class="flex flex-col gap-1.5">
+            <template x-for="(entry, i) in task().feedback_log" :key="i">
+              <li class="text-xs bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
+                <div class="text-gray-400" x-text="entry.sent_at"></div>
+                <div x-show="entry.note" x-text="entry.note" class="text-gray-600 mt-0.5"></div>
+              </li>
+            </template>
+          </ul>
+        </div>
+
+        <!-- Delete -->
+        <div class="mt-auto pt-4 border-t">
+          <button @click="deleteTask()"
+                  class="text-xs text-red-400 hover:text-red-600 transition">Delete task</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div x-show="$store.tasks.settingsOpen"
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" style="display:none">
+    <div x-data="settingsPanel()" x-init="load()"
+         class="bg-white rounded-xl shadow-2xl w-96 p-6 flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold">Settings</h2>
+        <button @click="$store.tasks.settingsOpen = false" class="text-gray-400 hover:text-gray-700">✕</button>
+      </div>
+
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-500">Plan.io base URL</span>
+        <input x-model="form.planio_base_url" type="url" class="border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand" placeholder="https://yourco.plan.io" />
+      </label>
+
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-500">Plan.io API key</span>
+        <input x-model="form.planio_api_key" type="password" class="border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand" />
+      </label>
+
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="text-gray-500">Feedback warning (days)</span>
+        <input x-model="form.feedback_warning_days" type="number" min="1" class="border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand" />
+      </label>
+
+      <div class="flex gap-2">
+        <button @click="testConnection()" class="text-sm px-3 py-1.5 border rounded hover:bg-gray-50 transition">Test Connection</button>
+        <button @click="save()" class="text-sm px-3 py-1.5 bg-brand text-white rounded hover:bg-brand-dark transition ml-auto">Save</button>
+      </div>
+
+      <p x-show="statusMsg" x-text="statusMsg" class="text-xs text-center"
+         :class="statusOk ? 'text-green-600' : 'text-red-500'"></p>
+    </div>
+  </div>
+
+</body>
+</html>

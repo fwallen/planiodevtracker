@@ -1,0 +1,6 @@
+.env
+.DS_Store
+src/api/vendor/
+src/api/composer.lock
+.idea
+.claude

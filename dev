@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CMD=${1:-help}
+
+case "$CMD" in
+  up)
+    docker-compose up -d "${@:2}"
+    echo "App: http://localhost:8980  DB: localhost:8981"
+    ;;
+  build)
+    docker-compose up -d --build "${@:2}"
+    echo "App: http://localhost:8980  DB: localhost:8981"
+    ;;
+  down)
+    docker-compose down "${@:2}"
+    ;;
+  destroy)
+    docker-compose down -v "${@:2}"
+    ;;
+  logs)
+    docker-compose logs -f "${@:2:-app}"
+    ;;
+  shell)
+    docker exec -it devtracker_app bash
+    ;;
+  composer)
+    docker exec -it devtracker_app bash -c "cd /var/www/api && composer ${*:2}"
+    ;;
+  mysql)
+    docker exec -it devtracker_mysql mysql -u devtracker -pdevtracker devtracker
+    ;;
+  ps)
+    docker-compose ps
+    ;;
+  *)
+    echo "Usage: ./dev <command>"
+    echo ""
+    echo "  up        Start containers (no rebuild)"
+    echo "  build     Start containers with rebuild"
+    echo "  down      Stop containers"
+    echo "  destroy   Stop containers and delete DB volume"
+    echo "  logs      Tail logs (default: app)"
+    echo "  shell     Open bash in the app container"
+    echo "  composer  Run a Composer command (e.g. ./dev composer require foo/bar)"
+    echo "  mysql     Open a MySQL shell"
+    echo "  ps        Show container status"
+    ;;
+esac

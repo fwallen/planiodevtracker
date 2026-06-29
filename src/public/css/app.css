@@ -1,0 +1,12 @@
+/* Minimal — Tailwind handles almost everything */
+
+/* Smooth slide-in for the detail panel */
+@keyframes slide-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+[x-data="detailPanel"] > div:last-child,
+[x-data*="detailPanel"] .w-96 {
+  animation: slide-in 0.2s ease-out;
+}
