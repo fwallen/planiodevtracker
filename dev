@@ -27,6 +27,15 @@ case "$CMD" in
   composer)
     docker exec -it devtracker_app bash -c "cd /var/www/api && composer ${*:2}"
     ;;
+  migrate)
+    docker exec devtracker_app php /var/www/api/vendor/bin/phoenix migrate --config /var/www/api/phoenix.php
+    ;;
+  migrate:status)
+    docker exec devtracker_app php /var/www/api/vendor/bin/phoenix status --config /var/www/api/phoenix.php
+    ;;
+  migrate:create)
+    docker exec devtracker_app php /var/www/api/vendor/bin/phoenix create "${2:-NewMigration}" --config /var/www/api/phoenix.php
+    ;;
   mysql)
     docker exec -it devtracker_mysql mysql -u devtracker -pdevtracker devtracker
     ;;
@@ -42,8 +51,11 @@ case "$CMD" in
     echo "  destroy   Stop containers and delete DB volume"
     echo "  logs      Tail logs (default: app)"
     echo "  shell     Open bash in the app container"
-    echo "  composer  Run a Composer command (e.g. ./dev composer require foo/bar)"
-    echo "  mysql     Open a MySQL shell"
+    echo "  composer        Run a Composer command (e.g. ./dev composer require foo/bar)"
+    echo "  migrate         Run pending migrations"
+    echo "  migrate:status  Show applied/pending migrations"
+    echo "  migrate:create  Scaffold a new migration (e.g. ./dev migrate:create AddIndexToTasks)"
+    echo "  mysql           Open a MySQL shell"
     echo "  ps        Show container status"
     ;;
 esac

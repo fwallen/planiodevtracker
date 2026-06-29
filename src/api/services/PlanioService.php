@@ -17,6 +17,11 @@ class PlanioService
         return $this->request('/users/current.json')['user'];
     }
 
+    public function fetchIssue(int $id): array
+    {
+        return $this->request("/issues/{$id}.json")['issue'];
+    }
+
     public function syncIssues(): array
     {
         $issues = [];

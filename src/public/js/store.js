@@ -6,6 +6,7 @@ document.addEventListener('alpine:init', () => {
     settingsOpen: false,
     syncing: false,
     syncMsg: '',
+    syncError: false,
     settings: {},
 
     async load() {
@@ -49,9 +50,29 @@ document.addEventListener('alpine:init', () => {
       if (this.detail === id) this.detail = null;
     },
 
-    async sendFeedback(id, note) {
-      await api.post('/tasks/' + id + '/send-feedback', { note });
+    async sendFeedback(id, note, handedTo) {
+      await api.post('/tasks/' + id + '/send-feedback', { note, handed_to: handedTo });
       await this.openDetail(id);
+    },
+
+    async importRm(input) {
+      const rmId = input.value.trim();
+      if (!rmId) return;
+      this.syncing = true;
+      this.syncMsg = '';
+      this.syncError = false;
+      try {
+        const task = await api.post('/planio/import', { rm_id: parseInt(rmId, 10) });
+        this._replace(task);
+        this.syncMsg = 'Imported RM' + rmId;
+        input.value = '';
+        setTimeout(() => { this.syncMsg = ''; this.syncError = false; }, 4000);
+      } catch (e) {
+        this.syncError = true;
+        this.syncMsg = 'Import failed: ' + e.message;
+      } finally {
+        this.syncing = false;
+      }
     },
 
     async gotFeedback(id) {
@@ -62,12 +83,14 @@ document.addEventListener('alpine:init', () => {
     async sync() {
       this.syncing = true;
       this.syncMsg = '';
+      this.syncError = false;
       try {
         const result = await api.get('/planio/sync');
         this.syncMsg = 'Synced: ' + result.imported + ' new, ' + result.updated + ' updated';
         await this.load();
-        setTimeout(() => { this.syncMsg = ''; }, 5000);
+        setTimeout(() => { this.syncMsg = ''; this.syncError = false; }, 5000);
       } catch (e) {
+        this.syncError = true;
         this.syncMsg = 'Sync failed: ' + e.message;
       } finally {
         this.syncing = false;

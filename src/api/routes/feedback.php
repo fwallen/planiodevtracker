@@ -8,8 +8,9 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 $app->post('/api/tasks/{id}/send-feedback', function (Request $request, Response $response, array $args): Response {
     $db   = Database::get();
     $id   = (int)$args['id'];
-    $body = (array)$request->getParsedBody();
-    $note = $body['note'] ?? null;
+    $body     = (array)$request->getParsedBody();
+    $note     = $body['note'] ?? null;
+    $handedTo = ($body['handed_to'] ?? '') ?: null;
 
     $task = $db->prepare('SELECT id FROM tasks WHERE id = ?');
     $task->execute([$id]);
@@ -22,7 +23,7 @@ $app->post('/api/tasks/{id}/send-feedback', function (Request $request, Response
     $db->prepare(
         'UPDATE tasks SET status = \'awaiting_feedback\', feedback_rounds = feedback_rounds + 1, last_sent_at = NOW() WHERE id = ?'
     )->execute([$id]);
-    $db->prepare('INSERT INTO feedback_log (task_id, note) VALUES (?, ?)')->execute([$id, $note]);
+    $db->prepare('INSERT INTO feedback_log (task_id, handed_to, note) VALUES (?, ?, ?)')->execute([$id, $handedTo, $note]);
     $db->commit();
 
     $task = $db->prepare('SELECT * FROM tasks WHERE id = ?');

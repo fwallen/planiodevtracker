@@ -30,6 +30,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('detailPanel', () => ({
     notes: '',
     feedbackNote: '',
+    feedbackHandedTo: '',
     statuses: [
       { value: 'new',               label: 'New' },
       { value: 'in_progress',       label: 'In Progress' },
@@ -42,6 +43,7 @@ document.addEventListener('alpine:init', () => {
       this.$watch('$store.tasks.detail', id => {
         if (id) this.notes = this.task().notes ?? '';
         this.feedbackNote = '';
+        this.feedbackHandedTo = '';
       });
       if (this.$store.tasks.detail) this.notes = this.task().notes ?? '';
     },
@@ -56,8 +58,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     async sendFeedback() {
-      await this.$store.tasks.sendFeedback(this.task().id, this.feedbackNote);
+      await this.$store.tasks.sendFeedback(this.task().id, this.feedbackNote, this.feedbackHandedTo);
       this.feedbackNote = '';
+      this.feedbackHandedTo = '';
     },
 
     async gotFeedback() {

@@ -50,6 +50,18 @@
           class="px-3 py-1.5 rounded transition">My Day</button>
       </nav>
 
+      <!-- Import single RM -->
+      <form @submit.prevent="$store.tasks.importRm($el.querySelector('input'))" class="flex gap-1">
+        <input
+          type="number"
+          placeholder="RM #"
+          min="1"
+          :disabled="$store.tasks.syncing"
+          class="w-20 rounded px-2 py-1 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-brand-light disabled:opacity-50" />
+        <button type="submit" :disabled="$store.tasks.syncing"
+                class="text-sm px-2 py-1 bg-white/10 hover:bg-white/20 rounded transition disabled:opacity-50">Import</button>
+      </form>
+
       <!-- Sync Plan.io -->
       <button
         @click="$store.tasks.sync()"
@@ -83,7 +95,10 @@
     x-show="$store.tasks.syncMsg"
     x-transition.opacity
     class="max-w-screen-2xl mx-auto px-4 pt-2">
-    <div class="bg-green-100 border border-green-300 text-green-800 rounded px-3 py-2 text-sm"
+    <div :class="$store.tasks.syncError
+           ? 'bg-red-100 border border-red-300 text-red-800'
+           : 'bg-green-100 border border-green-300 text-green-800'"
+         class="rounded px-3 py-2 text-sm"
          x-text="$store.tasks.syncMsg"></div>
   </div>
 
@@ -182,6 +197,10 @@
         <!-- Send for Feedback -->
         <div x-show="['in_progress','feedback_received'].includes(task().status)">
           <div class="text-xs text-gray-400 mb-1 uppercase tracking-wide">Send for Feedback</div>
+          <input x-model="feedbackHandedTo"
+                 type="text"
+                 placeholder="Hand to… (name)"
+                 class="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand mb-1.5" />
           <textarea x-model="feedbackNote" rows="2"
                     placeholder="Optional note…"
                     class="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand resize-none mb-1.5"></textarea>
@@ -213,7 +232,10 @@
           <ul class="flex flex-col gap-1.5">
             <template x-for="(entry, i) in task().feedback_log" :key="i">
               <li class="text-xs bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
-                <div class="text-gray-400" x-text="entry.sent_at"></div>
+                <div class="flex items-center justify-between text-gray-400">
+                  <span x-text="entry.sent_at"></span>
+                  <span x-show="entry.handed_to" class="font-medium text-amber-700" x-text="'→ ' + entry.handed_to"></span>
+                </div>
                 <div x-show="entry.note" x-text="entry.note" class="text-gray-600 mt-0.5"></div>
               </li>
             </template>

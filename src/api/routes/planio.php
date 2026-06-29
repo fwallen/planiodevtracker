@@ -37,6 +37,51 @@ function mapPlanioStatus(string $planioStatus): string
     };
 }
 
+$app->post('/api/planio/import', function (Request $request, Response $response): Response {
+    try {
+        $body     = (array)$request->getParsedBody();
+        $planioId = (int)($body['rm_id'] ?? 0);
+        if ($planioId <= 0) {
+            return json($response, null, false, 'Invalid RM ID', 400);
+        }
+
+        $db    = Database::get();
+        $issue = planioService()->fetchIssue($planioId);
+
+        $title        = 'RM' . $planioId . ' - ' . ($issue['subject'] ?? '');
+        $project      = $issue['project']['name'] ?? null;
+        $dueDate      = $issue['due_date'] ?? null;
+        $requester    = $issue['author']['name'] ?? null;
+        $mappedStatus = mapPlanioStatus($issue['status']['name'] ?? '');
+
+        $existing = $db->prepare('SELECT id, status FROM tasks WHERE planio_issue_id = ?');
+        $existing->execute([$planioId]);
+        $row = $existing->fetch(\PDO::FETCH_ASSOC);
+
+        if ($row) {
+            if ($row['status'] === 'new') {
+                $db->prepare(
+                    'UPDATE tasks SET title = ?, project = ?, due_date = ?, status = ? WHERE planio_issue_id = ?'
+                )->execute([$title, $project, $dueDate, $mappedStatus, $planioId]);
+            } else {
+                $db->prepare(
+                    'UPDATE tasks SET title = ?, project = ?, due_date = ? WHERE planio_issue_id = ?'
+                )->execute([$title, $project, $dueDate, $planioId]);
+            }
+        } else {
+            $db->prepare(
+                'INSERT INTO tasks (planio_issue_id, title, project, requester, due_date, status) VALUES (?, ?, ?, ?, ?, ?)'
+            )->execute([$planioId, $title, $project, $requester, $dueDate, $mappedStatus]);
+        }
+
+        $task = $db->prepare('SELECT * FROM tasks WHERE planio_issue_id = ?');
+        $task->execute([$planioId]);
+        return json($response, $task->fetch(\PDO::FETCH_ASSOC));
+    } catch (\Throwable $e) {
+        return json($response, null, false, $e->getMessage(), 400);
+    }
+});
+
 $app->get('/api/planio/sync', function (Request $request, Response $response): Response {
     try {
         $db     = Database::get();
