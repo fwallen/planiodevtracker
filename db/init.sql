@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   title           VARCHAR(500) NOT NULL,
   project         VARCHAR(255) DEFAULT NULL,
   requester       VARCHAR(255) DEFAULT NULL,
-  status          ENUM('new','in_progress','awaiting_feedback','feedback_received','done') NOT NULL DEFAULT 'new',
+  status          ENUM('new','on_hold','in_progress','awaiting_feedback','feedback_received','done') NOT NULL DEFAULT 'new',
   priority        TINYINT DEFAULT 2,
   due_date        DATE DEFAULT NULL,
   notes           TEXT DEFAULT NULL,

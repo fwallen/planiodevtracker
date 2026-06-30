@@ -173,8 +173,12 @@
     <div x-data="detailPanel()" x-init="init()"
          class="w-96 bg-white shadow-xl flex flex-col overflow-y-auto">
 
-      <div class="px-4 py-3 border-b flex items-center justify-between">
-        <span class="font-semibold" x-text="task().title"></span>
+      <div class="px-4 py-3 border-b flex items-center justify-between gap-2">
+        <span class="font-semibold flex-1 min-w-0 truncate" x-text="task().title"></span>
+        <a x-show="task().planio_issue_id"
+           :href="($store.tasks.settings?.planio_base_url ?? '') + '/issues/' + task().planio_issue_id"
+           target="_blank"
+           class="text-xs text-brand hover:underline whitespace-nowrap">View in Plan.io</a>
         <button @click="$store.tasks.detail = null" class="text-gray-400 hover:text-gray-700">✕</button>
       </div>
 
@@ -195,7 +199,7 @@
         </div>
 
         <!-- Send for Feedback -->
-        <div x-show="['in_progress','feedback_received'].includes(task().status)">
+        <div x-show="['new','in_progress','feedback_received'].includes(task().status)">
           <div class="text-xs text-gray-400 mb-1 uppercase tracking-wide">Send for Feedback</div>
           <input x-model="feedbackHandedTo"
                  type="text"

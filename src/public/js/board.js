@@ -2,6 +2,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('boardComponent', () => ({
     columns: [
       { status: 'new',               label: 'New' },
+      { status: 'on_hold',           label: 'On Hold' },
       { status: 'in_progress',       label: 'In Progress' },
       { status: 'awaiting_feedback', label: 'Awaiting Feedback' },
       { status: 'feedback_received', label: 'Feedback Received' },
@@ -33,6 +34,7 @@ document.addEventListener('alpine:init', () => {
     feedbackHandedTo: '',
     statuses: [
       { value: 'new',               label: 'New' },
+      { value: 'on_hold',           label: 'On Hold' },
       { value: 'in_progress',       label: 'In Progress' },
       { value: 'awaiting_feedback', label: 'Awaiting Feedback' },
       { value: 'feedback_received', label: 'Feedback Received' },
