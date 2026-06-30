@@ -67,6 +67,10 @@ $app->group('/api/tasks', function (RouteCollectorProxy $group) {
         $log->execute([(int)$args['id']]);
         $task['feedback_log'] = $log->fetchAll();
 
+        $links = $db->prepare('SELECT * FROM task_links WHERE task_id = ? ORDER BY created_at ASC');
+        $links->execute([(int)$args['id']]);
+        $task['links'] = $links->fetchAll();
+
         return json($response, $task);
     });
 
@@ -99,6 +103,46 @@ $app->group('/api/tasks', function (RouteCollectorProxy $group) {
     $group->delete('/{id}', function (Request $request, Response $response, array $args): Response {
         $db = Database::get();
         $db->prepare('DELETE FROM tasks WHERE id = ?')->execute([(int)$args['id']]);
+        return json($response, null);
+    });
+
+    // --- Links ---
+
+    $group->post('/{id}/links', function (Request $request, Response $response, array $args): Response {
+        $db   = Database::get();
+        $body = (array)$request->getParsedBody();
+
+        if (empty($body['title']) || empty($body['url'])) {
+            return json($response, null, false, 'title and url are required', 422);
+        }
+
+        $stmt = $db->prepare('INSERT INTO task_links (task_id, title, url) VALUES (?, ?, ?)');
+        $stmt->execute([(int)$args['id'], trim($body['title']), trim($body['url'])]);
+
+        $link = $db->query('SELECT * FROM task_links WHERE id = ' . $db->lastInsertId())->fetch();
+        return json($response, $link, true, null, 201);
+    });
+
+    $group->put('/{id}/links/{link_id}', function (Request $request, Response $response, array $args): Response {
+        $db   = Database::get();
+        $body = (array)$request->getParsedBody();
+
+        if (empty($body['title']) || empty($body['url'])) {
+            return json($response, null, false, 'title and url are required', 422);
+        }
+
+        $db->prepare('UPDATE task_links SET title = ?, url = ? WHERE id = ? AND task_id = ?')
+           ->execute([trim($body['title']), trim($body['url']), (int)$args['link_id'], (int)$args['id']]);
+
+        $link = $db->prepare('SELECT * FROM task_links WHERE id = ?');
+        $link->execute([(int)$args['link_id']]);
+        return json($response, $link->fetch());
+    });
+
+    $group->delete('/{id}/links/{link_id}', function (Request $request, Response $response, array $args): Response {
+        $db = Database::get();
+        $db->prepare('DELETE FROM task_links WHERE id = ? AND task_id = ?')
+           ->execute([(int)$args['link_id'], (int)$args['id']]);
         return json($response, null);
     });
 });

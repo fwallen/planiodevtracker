@@ -80,6 +80,21 @@ document.addEventListener('alpine:init', () => {
       this._replace(task);
     },
 
+    async addLink(taskId, title, url) {
+      await api.post('/tasks/' + taskId + '/links', { title, url });
+      await this.openDetail(taskId);
+    },
+
+    async updateLink(taskId, linkId, title, url) {
+      await api.put('/tasks/' + taskId + '/links/' + linkId, { title, url });
+      await this.openDetail(taskId);
+    },
+
+    async deleteLink(taskId, linkId) {
+      await api.delete('/tasks/' + taskId + '/links/' + linkId);
+      await this.openDetail(taskId);
+    },
+
     async sync() {
       this.syncing = true;
       this.syncMsg = '';

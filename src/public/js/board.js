@@ -32,6 +32,10 @@ document.addEventListener('alpine:init', () => {
     notes: '',
     feedbackNote: '',
     feedbackHandedTo: '',
+    linkTitle: '',
+    linkUrl: '',
+    addingLink: false,
+    editingLink: null,
     statuses: [
       { value: 'new',               label: 'New' },
       { value: 'on_hold',           label: 'On Hold' },
@@ -46,6 +50,10 @@ document.addEventListener('alpine:init', () => {
         if (id) this.notes = this.task().notes ?? '';
         this.feedbackNote = '';
         this.feedbackHandedTo = '';
+        this.linkTitle = '';
+        this.linkUrl = '';
+        this.addingLink = false;
+        this.editingLink = null;
       });
       if (this.$store.tasks.detail) this.notes = this.task().notes ?? '';
     },
@@ -76,6 +84,37 @@ document.addEventListener('alpine:init', () => {
     async deleteTask() {
       if (!confirm('Delete this task?')) return;
       await this.$store.tasks.deleteTask(this.task().id);
+    },
+
+    async addLink() {
+      const title = this.linkTitle.trim();
+      const url   = this.linkUrl.trim();
+      if (!title || !url) return;
+      await this.$store.tasks.addLink(this.task().id, title, url);
+      this.linkTitle = '';
+      this.linkUrl   = '';
+      this.addingLink = false;
+    },
+
+    startEditLink(link) {
+      this.editingLink = { ...link };
+    },
+
+    cancelEditLink() {
+      this.editingLink = null;
+    },
+
+    async saveEditLink() {
+      const title = this.editingLink.title.trim();
+      const url   = this.editingLink.url.trim();
+      if (!title || !url) return;
+      await this.$store.tasks.updateLink(this.task().id, this.editingLink.id, title, url);
+      this.editingLink = null;
+    },
+
+    async deleteLink(linkId) {
+      if (!confirm('Remove this link?')) return;
+      await this.$store.tasks.deleteLink(this.task().id, linkId);
     },
   }));
 });
