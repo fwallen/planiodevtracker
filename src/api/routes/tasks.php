@@ -18,7 +18,7 @@ $app->group('/api/tasks', function (RouteCollectorProxy $group) {
             $sql .= ' WHERE status = ?';
             $bindings[] = $params['status'];
         }
-        $sql .= ' ORDER BY priority DESC, due_date ASC, created_at ASC';
+        $sql .= ' ORDER BY sort_order ASC, priority DESC, due_date ASC, created_at ASC';
 
         $stmt = $db->prepare($sql);
         $stmt->execute($bindings);
@@ -51,6 +51,37 @@ $app->group('/api/tasks', function (RouteCollectorProxy $group) {
 
         $task = $db->query('SELECT * FROM tasks WHERE id = ' . $db->lastInsertId())->fetch();
         return json($response, $task, true, null, 201);
+    });
+
+    $group->post('/reorder', function (Request $request, Response $response): Response {
+        $db   = Database::get();
+        $body = (array)$request->getParsedBody();
+        $ids  = $body['ids'] ?? null;
+
+        if (!is_array($ids) || $ids === []) {
+            return json($response, null, false, 'ids must be a non-empty array', 422);
+        }
+
+        $ids = array_values(array_map('intval', $ids));
+
+        // Assign sequential sort_order in one transaction. Preserve updated_at so
+        // reordering does not reset a task's "days in status" clock.
+        $db->beginTransaction();
+        try {
+            $stmt = $db->prepare('UPDATE tasks SET sort_order = ?, updated_at = updated_at WHERE id = ?');
+            foreach ($ids as $position => $id) {
+                $stmt->execute([$position, $id]);
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $tasks = $db->prepare("SELECT * FROM tasks WHERE id IN ($placeholders)");
+        $tasks->execute($ids);
+        return json($response, $tasks->fetchAll());
     });
 
     $group->get('/{id}', function (Request $request, Response $response, array $args): Response {

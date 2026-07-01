@@ -27,6 +27,7 @@
   <script src="/js/taskCard.js"></script>
   <script src="/js/settings.js"></script>
 
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
 </head>
@@ -112,9 +113,10 @@
             <span class="text-xs text-gray-400 font-normal"
                   x-text="tasksFor(col.status).length"></span>
           </div>
-          <div class="p-2 flex flex-col gap-2 flex-1 min-h-[120px]">
+          <div class="p-2 flex flex-col gap-2 flex-1 min-h-[120px]"
+               :data-status="col.status">
             <template x-for="task in tasksFor(col.status)" :key="task.id">
-              <div x-data="taskCard(task)" @click="open()" class="task-card cursor-pointer">
+              <div x-data="taskCard(task)" @click="open()" :data-task-id="task.id" class="task-card cursor-grab active:cursor-grabbing">
                 <!-- Card markup injected by taskCard component -->
                 <div :class="cardClass()" class="rounded-md border p-2.5 hover:shadow transition text-sm">
                   <div class="font-medium leading-snug mb-1" x-text="task.title"></div>
@@ -145,10 +147,10 @@
   <!-- My Day View -->
   <main x-show="$store.tasks.view === 'myday'" class="max-w-screen-2xl mx-auto px-4 py-4">
     <div x-data="boardComponent()" x-init="init()">
-      <h2 class="text-sm font-medium text-gray-500 mb-3">In progress or feedback received — sorted by due date</h2>
-      <div class="flex flex-col gap-2 max-w-2xl">
+      <h2 class="text-sm font-medium text-gray-500 mb-3">In progress or feedback received — drag to reorder</h2>
+      <div class="flex flex-col gap-2 max-w-2xl" data-myday>
         <template x-for="task in myDayTasks()" :key="task.id">
-          <div x-data="taskCard(task)" @click="open()" class="task-card cursor-pointer">
+          <div x-data="taskCard(task)" @click="open()" :data-task-id="task.id" class="task-card cursor-grab active:cursor-grabbing">
             <div :class="cardClass()" class="rounded-md border bg-white p-3 hover:shadow transition text-sm flex items-center gap-3">
               <div class="flex-1">
                 <div class="font-medium" x-text="task.title"></div>

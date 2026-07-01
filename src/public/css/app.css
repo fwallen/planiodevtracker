@@ -10,3 +10,7 @@
 [x-data*="detailPanel"] .w-96 {
   animation: slide-in 0.2s ease-out;
 }
+
+/* Drag-and-drop */
+.sortable-ghost { opacity: 0.4; }
+.sortable-drag  { opacity: 0.9; }

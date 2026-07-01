@@ -8,6 +8,7 @@ document.addEventListener('alpine:init', () => {
     syncMsg: '',
     syncError: false,
     settings: {},
+    _skipClick: false,
 
     async load() {
       this.items = await api.get('/tasks');
@@ -109,6 +110,40 @@ document.addEventListener('alpine:init', () => {
         this.syncMsg = 'Sync failed: ' + e.message;
       } finally {
         this.syncing = false;
+      }
+    },
+
+    // A drag is starting: mark so the trailing click doesn't open the detail modal.
+    beginDrag() {
+      this._skipClick = true;
+    },
+
+    // Drag finished: keep suppressing the click that fires right after mouseup,
+    // then re-enable normal clicks shortly after.
+    endDrag() {
+      setTimeout(() => { this._skipClick = false; }, 100);
+    },
+
+    // Persist a manual ordering for the given task ids (in the desired order).
+    // Reorders the local list in place (keeping each id in one of the slots the
+    // group currently occupies) and writes the new sort_order server-side.
+    async reorder(orderedIds) {
+      const idSet = new Set(orderedIds);
+      const seq = orderedIds.map(id => this.items.find(t => t.id === id)).filter(Boolean);
+      let k = 0;
+      this.items = this.items.map(t => (idSet.has(t.id) ? seq[k++] : t));
+      await api.post('/tasks/reorder', { ids: orderedIds });
+    },
+
+    // Handle a board drag: a status change when the card lands in a different
+    // column, plus a manual reorder whenever the destination is In Progress.
+    // `toIds` is the destination column's task ids in their new visual order.
+    async handleBoardDrag(taskId, fromStatus, toStatus, toIds) {
+      if (fromStatus !== toStatus) {
+        await this.updateTask(taskId, { status: toStatus });
+      }
+      if (toStatus === 'in_progress') {
+        await this.reorder(toIds);
       }
     },
 

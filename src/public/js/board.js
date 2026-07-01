@@ -9,22 +9,76 @@ document.addEventListener('alpine:init', () => {
       { status: 'done',              label: 'Done' },
     ],
 
-    init() {},
+    init() {
+      // Wire drag-and-drop once the x-for lists have rendered.
+      this.$nextTick(() => this.initSortables());
+    },
+
+    initSortables() {
+      if (typeof Sortable === 'undefined') {
+        console.error('[devtracker] SortableJS did not load — drag-and-drop disabled.');
+        return;
+      }
+      // Scope to this component's DOM so the Board and My Day instances only
+      // wire their own lists.
+      this.$el.querySelectorAll('[data-status]').forEach(el => {
+        this.initColumnSortable(el, el.dataset.status);
+      });
+      const myday = this.$el.querySelector('[data-myday]');
+      if (myday) this.initMyDaySortable(myday);
+    },
 
     tasksFor(status) {
       return Alpine.store('tasks').items.filter(t => t.status === status);
     },
 
+    // Manual drag order wins on My Day. items arrives sorted by sort_order from
+    // the API and stays in that order after local reorders, so we just filter.
     myDayTasks() {
       const active = ['in_progress', 'feedback_received'];
-      return Alpine.store('tasks').items
-        .filter(t => active.includes(t.status))
-        .sort((a, b) => {
-          if (!a.due_date && !b.due_date) return 0;
-          if (!a.due_date) return 1;
-          if (!b.due_date) return -1;
-          return a.due_date.localeCompare(b.due_date);
-        });
+      return Alpine.store('tasks').items.filter(t => active.includes(t.status));
+    },
+
+    // Read the destination list's card ids in their current DOM order.
+    _cardIds(listEl) {
+      return [...listEl.querySelectorAll('.task-card')].map(el => Number(el.dataset.taskId));
+    },
+
+    // Board: every column is a drop target (drag between columns changes status),
+    // but only In Progress keeps a manually arranged order (sort: true).
+    initColumnSortable(listEl, status) {
+      Sortable.create(listEl, {
+        group: 'board',
+        draggable: '.task-card',
+        sort: status === 'in_progress',
+        animation: 150,
+        onStart: () => Alpine.store('tasks').beginDrag(),
+        onEnd: (evt) => {
+          Alpine.store('tasks').endDrag();
+          const taskId     = Number(evt.item.dataset.taskId);
+          const fromStatus = evt.from.dataset.status;
+          const toStatus   = evt.to.dataset.status;
+          const toIds      = this._cardIds(evt.to);
+          // Revert Sortable's cross-list DOM move so Alpine's x-for stays the
+          // source of truth and re-renders both columns from the data.
+          if (evt.from !== evt.to) evt.from.appendChild(evt.item);
+          Alpine.store('tasks').handleBoardDrag(taskId, fromStatus, toStatus, toIds);
+        },
+      });
+    },
+
+    // My Day: single reorderable list, shares the persisted sort_order.
+    initMyDaySortable(listEl) {
+      Sortable.create(listEl, {
+        group: 'myday',
+        draggable: '.task-card',
+        animation: 150,
+        onStart: () => Alpine.store('tasks').beginDrag(),
+        onEnd: (evt) => {
+          Alpine.store('tasks').endDrag();
+          Alpine.store('tasks').reorder(this._cardIds(evt.to));
+        },
+      });
     },
   }));
 

@@ -11,6 +11,8 @@ document.addEventListener('alpine:init', () => {
     },
 
     open() {
+      // Ignore the click that fires at the end of a drag.
+      if (this.$store.tasks._skipClick) return;
       this.$store.tasks.openDetail(this.task.id);
     },
 
