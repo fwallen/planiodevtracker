@@ -17,11 +17,11 @@ import issues assigned to the developer, and layers personal status tracking on 
 
 | Layer      | Choice                          |
 |------------|---------------------------------|
-| Backend    | PHP 8.2+ with Slim Framework 4  |
+| Backend    | PHP 8.4+ with Slim Framework 4  |
 | Frontend   | Alpine.js + htmx + TailwindCSS (all via CDN, no build) |
 | Database   | MySQL 8                         |
 | Container  | Docker + Docker Compose         |
-| HTTP       | Apache (via php:8.2-apache image) |
+| HTTP       | Apache (via php:8.4-apache image) |
 
 ---
 
@@ -295,19 +295,17 @@ DB_PORT=3306
 DB_NAME=devtracker
 DB_USER=devtracker
 DB_PASS=devtracker
-
-PLANIO_BASE_URL=https://yoursubdomain.plan.io
-PLANIO_API_KEY=your_api_key_here
-
-FEEDBACK_WARNING_DAYS=3
 ```
+
+Plan.io settings (base URL, API key, feedback-warning threshold) are **not** environment
+variables — they are entered in the in-app Settings screen and stored in the `settings` table.
 
 ---
 
 ## Dockerfile
 
 ```dockerfile
-FROM php:8.2-apache
+FROM php:8.4-apache
 
 RUN apt-get update && apt-get install -y \
     libpdo-mysql \
