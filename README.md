@@ -42,7 +42,7 @@ cp .env.example .env
 #    The DB defaults work out of the box. Plan.io is configured
 #    in-app via the Settings screen, not here (see below).
 
-# 3. Build and start the containers
+# 3. Build and start the containers (installs PHP deps as part of the build)
 ./dev build          # == docker-compose up -d --build
 
 # 4. Run the database migrations (required on first run)
@@ -50,6 +50,10 @@ cp .env.example .env
 ```
 
 Then open **http://localhost:8980**.
+
+> **Note:** Composer dependencies are installed during `./dev build` and live in the
+> `devtracker_vendor` volume (not on the host), so the `src/api` bind mount doesn't shadow
+> them. If you later change `composer.json`, refresh them with `./dev composer install`.
 
 > **Note:** Migrations are **not** run automatically on boot. After the very first
 > `./dev build` — and any time new migrations are added — run `./dev migrate`.

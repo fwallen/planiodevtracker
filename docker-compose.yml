@@ -8,6 +8,7 @@ services:
     volumes:
       - ./src/public:/var/www/html
       - ./src/api:/var/www/api
+      - devtracker_vendor:/var/www/api/vendor
     depends_on:
       - mysql
     env_file:
@@ -37,3 +38,5 @@ networks:
 volumes:
   devtracker_mysql_data:
     name: devtracker_mysql_data
+  devtracker_vendor:
+    name: devtracker_vendor
