@@ -4,3 +4,4 @@ src/api/vendor/
 src/api/composer.lock
 .idea
 .claude
+tasks/
