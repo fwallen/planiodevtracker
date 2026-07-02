@@ -9,6 +9,19 @@ document.addEventListener('alpine:init', () => {
     syncError: false,
     settings: {},
     _skipClick: false,
+    _flashTimer: null,
+
+    // Show a transient status message. Errors persist; successes auto-clear
+    // after 4s. Always cancels any pending clear so a stale success timer
+    // can't wipe a message set after it.
+    _flash(msg, isError = false) {
+      this.syncMsg = msg;
+      this.syncError = isError;
+      clearTimeout(this._flashTimer);
+      if (!isError) {
+        this._flashTimer = setTimeout(() => { this.syncMsg = ''; this.syncError = false; }, 4000);
+      }
+    },
 
     async load() {
       this.items = await api.get('/tasks');
@@ -60,17 +73,14 @@ document.addEventListener('alpine:init', () => {
       const rmId = input.value.trim();
       if (!rmId) return;
       this.syncing = true;
-      this.syncMsg = '';
-      this.syncError = false;
+      this._flash('');
       try {
-        const task = await api.post('/planio/import', { rm_id: parseInt(rmId, 10) });
+        const { task, created } = await api.post('/planio/import', { rm_id: parseInt(rmId, 10) });
         this._replace(task);
-        this.syncMsg = 'Imported RM' + rmId;
         input.value = '';
-        setTimeout(() => { this.syncMsg = ''; this.syncError = false; }, 4000);
+        this._flash((created ? 'Imported RM' : 'Refreshed RM') + rmId);
       } catch (e) {
-        this.syncError = true;
-        this.syncMsg = 'Import failed: ' + e.message;
+        this._flash('Import failed: ' + e.message, true);
       } finally {
         this.syncing = false;
       }
@@ -98,16 +108,13 @@ document.addEventListener('alpine:init', () => {
 
     async sync() {
       this.syncing = true;
-      this.syncMsg = '';
-      this.syncError = false;
+      this._flash('');
       try {
         const result = await api.get('/planio/sync');
-        this.syncMsg = 'Synced: ' + result.imported + ' new, ' + result.updated + ' updated';
         await this.load();
-        setTimeout(() => { this.syncMsg = ''; this.syncError = false; }, 5000);
+        this._flash('Synced: ' + result.imported + ' new, ' + result.updated + ' updated');
       } catch (e) {
-        this.syncError = true;
-        this.syncMsg = 'Sync failed: ' + e.message;
+        this._flash('Sync failed: ' + e.message, true);
       } finally {
         this.syncing = false;
       }

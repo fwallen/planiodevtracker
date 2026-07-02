@@ -47,7 +47,7 @@ There is **no frontend build step**: Alpine.js, htmx, and TailwindCSS all load f
 
 ## Core Domain Logic
 
-**Status pipeline:** `new → in_progress → awaiting_feedback → feedback_received → done`, where `awaiting_feedback ⇄ feedback_received` loops on each round.
+**Status pipeline:** `new → in_progress → awaiting_feedback → feedback_received → done`, where `awaiting_feedback ⇄ feedback_received` loops on each round. `on_hold` is an off-pipeline parking state (its own board column between New and In Progress) that any task can move into and back out of; Plan.io's "On hold" maps to it on sync/import.
 
 **The critical invariant:** every transition *into* `awaiting_feedback` must (1) increment `tasks.feedback_rounds`, (2) set `tasks.last_sent_at = now`, and (3) insert a row into `feedback_log`. This is what powers the "days blocked" and round-count UI. Implement it in one place (the send-feedback handler) so the three side effects can't drift apart.
 

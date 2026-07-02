@@ -123,6 +123,7 @@
                   <div class="flex items-center gap-2 text-xs text-gray-400">
                     <span x-show="task.project" x-text="task.project"></span>
                     <span x-show="task.requester" x-text="'← ' + task.requester"></span>
+                    <span x-show="task.assignee" x-text="'@ ' + task.assignee"></span>
                   </div>
                   <div class="flex items-center gap-2 mt-1.5 text-xs text-gray-400">
                     <span x-text="daysInStatus() + 'd'"></span>
@@ -154,7 +155,7 @@
             <div :class="cardClass()" class="rounded-md border bg-white p-3 hover:shadow transition text-sm flex items-center gap-3">
               <div class="flex-1">
                 <div class="font-medium" x-text="task.title"></div>
-                <div class="text-xs text-gray-400 mt-0.5" x-text="[task.project, task.requester ? '← ' + task.requester : null].filter(Boolean).join(' · ')"></div>
+                <div class="text-xs text-gray-400 mt-0.5" x-text="[task.project, task.requester ? '← ' + task.requester : null, task.assignee ? '@ ' + task.assignee : null].filter(Boolean).join(' · ')"></div>
               </div>
               <div class="text-xs text-gray-400 whitespace-nowrap" x-text="task.due_date ?? ''"></div>
               <div class="text-xs px-1.5 py-0.5 rounded capitalize"

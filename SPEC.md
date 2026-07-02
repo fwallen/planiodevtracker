@@ -127,8 +127,10 @@ CREATE TABLE tasks (
   title           VARCHAR(500) NOT NULL,
   project         VARCHAR(255) DEFAULT NULL,
   requester       VARCHAR(255) DEFAULT NULL,
+  assignee        VARCHAR(255) DEFAULT NULL,  -- Plan.io assigned_to.name; may differ from you for imported issues
   status          ENUM(
                     'new',
+                    'on_hold',
                     'in_progress',
                     'awaiting_feedback',
                     'feedback_received',
@@ -173,10 +175,17 @@ new → in_progress → awaiting_feedback → feedback_received → done
                           ↑                    |
                           └────────────────────┘
                           (loops on each feedback round)
+
+on_hold — a parking state any task can be moved into and back out of
+          (its own board column, shown between New and In Progress)
 ```
 
 Each transition to `awaiting_feedback` increments `feedback_rounds` and sets `last_sent_at`.
 A log entry is created in `feedback_log` on every such transition.
+
+`on_hold` sits outside the linear flow: it's a manual park for work that's paused,
+reachable from (and returnable to) any status. Plan.io's "On hold" issue status maps
+to it on sync/import; otherwise the developer sets it locally.
 
 ---
 
@@ -201,6 +210,7 @@ A log entry is created in `feedback_log` on every such transition.
 | Method | Path               | Description                              |
 |--------|--------------------|------------------------------------------|
 | GET    | /api/planio/sync   | Pull issues assigned to me, upsert tasks |
+| POST   | /api/planio/import | Import/refresh a single issue by RM id   |
 | GET    | /api/planio/status | Test API key + return current user info  |
 
 ### Settings
@@ -221,9 +231,18 @@ A log entry is created in `feedback_log` on every such transition.
 - Calls Plan.io REST API: `GET /issues.json?assigned_to_id=me&status_id=open`
 - For each returned issue:
   - If `planio_issue_id` does not exist in `tasks` → insert as `status = 'new'`
-  - If it already exists → update `title`, `project`, `due_date` only (do not overwrite local status)
+  - If it already exists → update `title`, `project`, `assignee`, `due_date` only (do not overwrite local status)
 - Sync does **not** delete tasks that are no longer in Plan.io (they may have been closed)
 - Issues closed in Plan.io are ignored on sync; the developer manages `done` status locally
+
+### Import Behavior (single issue)
+- Request body: `{ "rm_id": <int> }` — fetches that one issue via `GET /issues/{id}.json`
+- Unlike sync, import is **not** restricted to issues assigned to you — this is how you pull
+  in an issue where you're part of the pipeline but not the direct assignee
+- Upsert rules match sync (never overwrite a locally-owned status)
+- Response `data` is `{ "task": <task object>, "created": <bool> }` where `created` is
+  `true` on a fresh insert and `false` when an already-tracked issue was refreshed (drives
+  the "Imported RM" vs "Refreshed RM" UI message)
 
 ### Plan.io API Reference
 - Base URL: `https://{your-subdomain}.plan.io`
@@ -232,7 +251,7 @@ A log entry is created in `feedback_log` on every such transition.
   - `issue.id` → `planio_issue_id`
   - `issue.subject` → `title`
   - `issue.project.name` → `project`
-  - `issue.assigned_to.name` → (confirm this is the current user)
+  - `issue.assigned_to.name` → `assignee`
   - `issue.due_date` → `due_date`
   - `issue.author.name` → `requester`
 
@@ -260,6 +279,7 @@ Kanban-style columns, one per status. Cards show:
 - Task title
 - Project name (subdued)
 - Requester name
+- Assignee name (subdued, prefixed `@`; shown whenever the task has one — useful for issues imported by RM id where you're in the pipeline but not the direct assignee)
 - Days in current status (auto-calculated)
 - Feedback round count badge (only shown if > 0)
 - Plan.io link icon (if linked to an issue)

@@ -54,31 +54,33 @@ $app->post('/api/planio/import', function (Request $request, Response $response)
         $project      = $issue['project']['name'] ?? null;
         $dueDate      = $issue['due_date'] ?? null;
         $requester    = $issue['author']['name'] ?? null;
+        $assignee     = $issue['assigned_to']['name'] ?? null;
         $mappedStatus = mapPlanioStatus($issue['status']['name'] ?? '');
 
         $existing = $db->prepare('SELECT id, status FROM tasks WHERE planio_issue_id = ?');
         $existing->execute([$planioId]);
         $row = $existing->fetch(\PDO::FETCH_ASSOC);
 
+        $created = !$row;
         if ($row) {
             if ($row['status'] === 'new') {
                 $db->prepare(
-                    'UPDATE tasks SET title = ?, project = ?, due_date = ?, status = ? WHERE planio_issue_id = ?'
-                )->execute([$title, $project, $dueDate, $mappedStatus, $planioId]);
+                    'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, status = ? WHERE planio_issue_id = ?'
+                )->execute([$title, $project, $assignee, $dueDate, $mappedStatus, $planioId]);
             } else {
                 $db->prepare(
-                    'UPDATE tasks SET title = ?, project = ?, due_date = ? WHERE planio_issue_id = ?'
-                )->execute([$title, $project, $dueDate, $planioId]);
+                    'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ? WHERE planio_issue_id = ?'
+                )->execute([$title, $project, $assignee, $dueDate, $planioId]);
             }
         } else {
             $db->prepare(
-                'INSERT INTO tasks (planio_issue_id, title, project, requester, due_date, status) VALUES (?, ?, ?, ?, ?, ?)'
-            )->execute([$planioId, $title, $project, $requester, $dueDate, $mappedStatus]);
+                'INSERT INTO tasks (planio_issue_id, title, project, requester, assignee, due_date, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+            )->execute([$planioId, $title, $project, $requester, $assignee, $dueDate, $mappedStatus]);
         }
 
         $task = $db->prepare('SELECT * FROM tasks WHERE planio_issue_id = ?');
         $task->execute([$planioId]);
-        return json($response, $task->fetch(\PDO::FETCH_ASSOC));
+        return json($response, ['task' => $task->fetch(\PDO::FETCH_ASSOC), 'created' => $created]);
     } catch (\Throwable $e) {
         return json($response, null, false, $e->getMessage(), 400);
     }
@@ -97,6 +99,7 @@ $app->get('/api/planio/sync', function (Request $request, Response $response): R
             $project       = $issue['project']['name'] ?? null;
             $dueDate       = $issue['due_date'] ?? null;
             $requester     = $issue['author']['name'] ?? null;
+            $assignee      = $issue['assigned_to']['name'] ?? null;
             $planioStatus  = $issue['status']['name'] ?? 'new';
             $mappedStatus  = mapPlanioStatus($planioStatus);
 
@@ -109,18 +112,18 @@ $app->get('/api/planio/sync', function (Request $request, Response $response): R
                 // (preserves developer-owned states like awaiting_feedback)
                 if ($row['status'] === 'new') {
                     $db->prepare(
-                        'UPDATE tasks SET title = ?, project = ?, due_date = ?, status = ? WHERE planio_issue_id = ?'
-                    )->execute([$title, $project, $dueDate, $mappedStatus, $planioId]);
+                        'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, status = ? WHERE planio_issue_id = ?'
+                    )->execute([$title, $project, $assignee, $dueDate, $mappedStatus, $planioId]);
                 } else {
                     $db->prepare(
-                        'UPDATE tasks SET title = ?, project = ?, due_date = ? WHERE planio_issue_id = ?'
-                    )->execute([$title, $project, $dueDate, $planioId]);
+                        'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ? WHERE planio_issue_id = ?'
+                    )->execute([$title, $project, $assignee, $dueDate, $planioId]);
                 }
                 $updated++;
             } else {
                 $db->prepare(
-                    'INSERT INTO tasks (planio_issue_id, title, project, requester, due_date, status) VALUES (?, ?, ?, ?, ?, ?)'
-                )->execute([$planioId, $title, $project, $requester, $dueDate, $mappedStatus]);
+                    'INSERT INTO tasks (planio_issue_id, title, project, requester, assignee, due_date, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                )->execute([$planioId, $title, $project, $requester, $assignee, $dueDate, $mappedStatus]);
                 $new++;
             }
         }
