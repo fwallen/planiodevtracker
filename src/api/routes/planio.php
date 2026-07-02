@@ -30,6 +30,12 @@ $app->get('/api/planio/status', function (Request $request, Response $response):
 
 function mapPlanioStatus(string $planioStatus): string
 {
+    // A deploy approval means the requester has responded, so it lands the task
+    // in feedback_received (see resolvePlanioStatus for the developer-owned guard).
+    if (mapPlanioApproval($planioStatus) !== null) {
+        return 'feedback_received';
+    }
+
     return match (strtolower(trim($planioStatus))) {
         'in progress' => 'in_progress',
         'feedback' => 'awaiting_feedback',
@@ -37,6 +43,33 @@ function mapPlanioStatus(string $planioStatus): string
         'resolved', 'closed', 'done', 'rejected' => 'done',
         default => 'new',
     };
+}
+
+// Plan.io deploy-approval statuses map to a badge on the card. Returns null for
+// any status that isn't an approval so the badge clears once the RM moves on.
+function mapPlanioApproval(string $planioStatus): ?string
+{
+    return match (strtolower(trim($planioStatus))) {
+        'approved for staging' => 'staging',
+        'approved for production' => 'production',
+        default => null,
+    };
+}
+
+// Plan.io never clobbers a developer-owned status once a task leaves 'new' — with
+// one exception: a deploy approval means the requester has responded, so a task
+// still in flight (in_progress or awaiting_feedback — the "send for feedback" step
+// is easy to forget) is nudged into feedback_received. Done/on_hold are left alone.
+// Keeps the sync/import guard in one place.
+function resolvePlanioStatus(string $localStatus, string $mappedStatus, ?string $approval): string
+{
+    if ($localStatus === 'new') {
+        return $mappedStatus;
+    }
+    if ($approval !== null && in_array($localStatus, ['in_progress', 'awaiting_feedback'], true)) {
+        return 'feedback_received';
+    }
+    return $localStatus;
 }
 
 $app->post('/api/planio/import', function (Request $request, Response $response): Response {
@@ -55,7 +88,9 @@ $app->post('/api/planio/import', function (Request $request, Response $response)
         $dueDate      = $issue['due_date'] ?? null;
         $requester    = $issue['author']['name'] ?? null;
         $assignee     = $issue['assigned_to']['name'] ?? null;
-        $mappedStatus = mapPlanioStatus($issue['status']['name'] ?? '');
+        $planioStatus = $issue['status']['name'] ?? '';
+        $mappedStatus = mapPlanioStatus($planioStatus);
+        $approval     = mapPlanioApproval($planioStatus);
 
         $existing = $db->prepare('SELECT id, status FROM tasks WHERE planio_issue_id = ?');
         $existing->execute([$planioId]);
@@ -63,19 +98,14 @@ $app->post('/api/planio/import', function (Request $request, Response $response)
 
         $created = !$row;
         if ($row) {
-            if ($row['status'] === 'new') {
-                $db->prepare(
-                    'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, status = ? WHERE planio_issue_id = ?'
-                )->execute([$title, $project, $assignee, $dueDate, $mappedStatus, $planioId]);
-            } else {
-                $db->prepare(
-                    'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ? WHERE planio_issue_id = ?'
-                )->execute([$title, $project, $assignee, $dueDate, $planioId]);
-            }
+            $newStatus = resolvePlanioStatus($row['status'], $mappedStatus, $approval);
+            $db->prepare(
+                'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, deploy_approval = ?, status = ? WHERE planio_issue_id = ?'
+            )->execute([$title, $project, $assignee, $dueDate, $approval, $newStatus, $planioId]);
         } else {
             $db->prepare(
-                'INSERT INTO tasks (planio_issue_id, title, project, requester, assignee, due_date, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
-            )->execute([$planioId, $title, $project, $requester, $assignee, $dueDate, $mappedStatus]);
+                'INSERT INTO tasks (planio_issue_id, title, project, requester, assignee, due_date, deploy_approval, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+            )->execute([$planioId, $title, $project, $requester, $assignee, $dueDate, $approval, $mappedStatus]);
         }
 
         $task = $db->prepare('SELECT * FROM tasks WHERE planio_issue_id = ?');
@@ -102,28 +132,25 @@ $app->get('/api/planio/sync', function (Request $request, Response $response): R
             $assignee      = $issue['assigned_to']['name'] ?? null;
             $planioStatus  = $issue['status']['name'] ?? 'new';
             $mappedStatus  = mapPlanioStatus($planioStatus);
+            $approval      = mapPlanioApproval($planioStatus);
 
             $existing = $db->prepare('SELECT id, status FROM tasks WHERE planio_issue_id = ?');
             $existing->execute([$planioId]);
             $row = $existing->fetch(\PDO::FETCH_ASSOC);
 
             if ($row) {
-                // Update title/project/due_date always; sync status only when still at 'new'
-                // (preserves developer-owned states like awaiting_feedback)
-                if ($row['status'] === 'new') {
-                    $db->prepare(
-                        'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, status = ? WHERE planio_issue_id = ?'
-                    )->execute([$title, $project, $assignee, $dueDate, $mappedStatus, $planioId]);
-                } else {
-                    $db->prepare(
-                        'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ? WHERE planio_issue_id = ?'
-                    )->execute([$title, $project, $assignee, $dueDate, $planioId]);
-                }
+                // title/project/due_date/deploy_approval always track Plan.io.
+                // status is developer-owned once past 'new' (see resolvePlanioStatus),
+                // except a deploy approval nudges awaiting_feedback → feedback_received.
+                $newStatus = resolvePlanioStatus($row['status'], $mappedStatus, $approval);
+                $db->prepare(
+                    'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, deploy_approval = ?, status = ? WHERE planio_issue_id = ?'
+                )->execute([$title, $project, $assignee, $dueDate, $approval, $newStatus, $planioId]);
                 $updated++;
             } else {
                 $db->prepare(
-                    'INSERT INTO tasks (planio_issue_id, title, project, requester, assignee, due_date, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
-                )->execute([$planioId, $title, $project, $requester, $assignee, $dueDate, $mappedStatus]);
+                    'INSERT INTO tasks (planio_issue_id, title, project, requester, assignee, due_date, deploy_approval, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+                )->execute([$planioId, $title, $project, $requester, $assignee, $dueDate, $approval, $mappedStatus]);
                 $new++;
             }
         }
