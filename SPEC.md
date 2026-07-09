@@ -236,7 +236,11 @@ to it on sync/import; otherwise the developer sets it locally.
 - **Status overrides** (a locally-owned status is only clobbered in these cases):
   - A Plan.io **terminal** status (`resolved`, `closed`, or `done`) forces the task to `done`,
     regardless of its local state — the ticket is finished, so the card lands in Done. (`rejected`
-    is *not* terminal and does not override.)
+    is *not* terminal and does not override.) Because the sync query is `status_id=open`, a ticket
+    resolved/closed upstream never appears in the payload; sync detects this by re-fetching each
+    still-active tracked task that dropped out of the open set and applying the terminal rule. (A
+    task that merely got reassigned away while still open maps to a non-terminal status and is left
+    untouched.)
   - A Plan.io **deploy approval** (`approved for staging` / `approved for production`) nudges an
     in-flight task (`in_progress` or `awaiting_feedback`) to `feedback_received`, since an approval
     means the requester has responded.

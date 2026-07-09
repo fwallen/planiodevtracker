@@ -126,7 +126,8 @@ $app->post('/api/planio/import', function (Request $request, Response $response)
 $app->get('/api/planio/sync', function (Request $request, Response $response): Response {
     try {
         $db     = Database::get();
-        $issues = planioService()->syncIssues();
+        $planio = planioService();
+        $issues = $planio->syncIssues();
         $new    = 0;
         $updated = 0;
 
@@ -160,6 +161,35 @@ $app->get('/api/planio/sync', function (Request $request, Response $response): R
                     'INSERT INTO tasks (planio_issue_id, title, project, requester, assignee, due_date, deploy_approval, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
                 )->execute([$planioId, $title, $project, $requester, $assignee, $dueDate, $approval, $mappedStatus]);
                 $new++;
+            }
+        }
+
+        // Reconcile tasks that dropped out of the open-issue set. The sync query
+        // is restricted to open issues, so a ticket resolved/closed upstream never
+        // appears above — it just goes missing. Re-fetch each still-active tracked
+        // task that wasn't in this sync and apply the terminal-status rule so a
+        // resolved/closed issue lands in Done. Genuinely-open tasks that merely got
+        // reassigned away from us map to a non-terminal status and are left alone.
+        $syncedIds = array_map('intval', array_column($issues, 'id'));
+        $active = $db->query(
+            "SELECT id, planio_issue_id FROM tasks
+             WHERE planio_issue_id IS NOT NULL
+               AND status IN ('new', 'in_progress', 'awaiting_feedback', 'feedback_received')"
+        )->fetchAll(\PDO::FETCH_ASSOC);
+
+        foreach ($active as $task) {
+            $pid = (int)$task['planio_issue_id'];
+            if (in_array($pid, $syncedIds, true)) {
+                continue; // already handled in the loop above
+            }
+            try {
+                $issue = $planio->fetchIssue($pid);
+            } catch (\Throwable $e) {
+                continue; // deleted or inaccessible upstream — leave local state alone
+            }
+            if (mapPlanioStatus($issue['status']['name'] ?? '') === 'done') {
+                $db->prepare('UPDATE tasks SET status = ? WHERE id = ?')->execute(['done', $task['id']]);
+                $updated++;
             }
         }
 
