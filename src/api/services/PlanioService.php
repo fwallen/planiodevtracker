@@ -50,12 +50,22 @@ class PlanioService
         ]);
         $body = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
         curl_close($ch);
+
+        if ($body === false) {
+            throw new RuntimeException("Plan.io request to $path failed: $error");
+        }
 
         if ($code < 200 || $code >= 300) {
             throw new RuntimeException("Plan.io API error $code for $path");
         }
 
-        return json_decode($body, true) ?? [];
+        $decoded = json_decode($body, true);
+        if (!is_array($decoded)) {
+            throw new RuntimeException("Plan.io returned an invalid JSON response for $path");
+        }
+
+        return $decoded;
     }
 }
