@@ -231,15 +231,24 @@ to it on sync/import; otherwise the developer sets it locally.
 - Calls Plan.io REST API: `GET /issues.json?assigned_to_id=me&status_id=open`
 - For each returned issue:
   - If `planio_issue_id` does not exist in `tasks` → insert as `status = 'new'`
-  - If it already exists → update `title`, `project`, `assignee`, `due_date` only (do not overwrite local status)
+  - If it already exists → update `title`, `project`, `assignee`, `due_date`, and `deploy_approval`;
+    local `status` is developer-owned and preserved, **except** for the two overrides below
+- **Status overrides** (a locally-owned status is only clobbered in these cases):
+  - A Plan.io **terminal** status (`resolved`, `closed`, or `done`) forces the task to `done`,
+    regardless of its local state — the ticket is finished, so the card lands in Done. (`rejected`
+    is *not* terminal and does not override.)
+  - A Plan.io **deploy approval** (`approved for staging` / `approved for production`) nudges an
+    in-flight task (`in_progress` or `awaiting_feedback`) to `feedback_received`, since an approval
+    means the requester has responded.
+- `on_hold` is never overridden by sync.
 - Sync does **not** delete tasks that are no longer in Plan.io (they may have been closed)
-- Issues closed in Plan.io are ignored on sync; the developer manages `done` status locally
 
 ### Import Behavior (single issue)
 - Request body: `{ "rm_id": <int> }` — fetches that one issue via `GET /issues/{id}.json`
 - Unlike sync, import is **not** restricted to issues assigned to you — this is how you pull
   in an issue where you're part of the pipeline but not the direct assignee
-- Upsert rules match sync (never overwrite a locally-owned status)
+- Upsert rules match sync (local status is preserved, subject to the same terminal-status and
+  deploy-approval overrides)
 - Response `data` is `{ "task": <task object>, "created": <bool> }` where `created` is
   `true` on a fresh insert and `false` when an already-tracked issue was refreshed (drives
   the "Imported RM" vs "Refreshed RM" UI message)

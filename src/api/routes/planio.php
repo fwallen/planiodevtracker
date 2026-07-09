@@ -40,7 +40,7 @@ function mapPlanioStatus(string $planioStatus): string
         'in progress' => 'in_progress',
         'feedback' => 'awaiting_feedback',
         'on hold' => 'on_hold',
-        'resolved', 'closed', 'done', 'rejected' => 'done',
+        'resolved', 'closed', 'done' => 'done',
         default => 'new',
     };
 }
@@ -57,14 +57,21 @@ function mapPlanioApproval(string $planioStatus): ?string
 }
 
 // Plan.io never clobbers a developer-owned status once a task leaves 'new' — with
-// one exception: a deploy approval means the requester has responded, so a task
-// still in flight (in_progress or awaiting_feedback — the "send for feedback" step
-// is easy to forget) is nudged into feedback_received. Done/on_hold are left alone.
-// Keeps the sync/import guard in one place.
+// two exceptions:
+//   1. Plan.io reaching a terminal state (resolved/closed/done → 'done')
+//      is authoritative: the ticket is finished, so the local task is marked done
+//      no matter what state the developer left it in.
+//   2. A deploy approval means the requester has responded, so a task still in
+//      flight (in_progress or awaiting_feedback — the "send for feedback" step is
+//      easy to forget) is nudged into feedback_received.
+// on_hold is left alone. Keeps the sync/import guard in one place.
 function resolvePlanioStatus(string $localStatus, string $mappedStatus, ?string $approval): string
 {
     if ($localStatus === 'new') {
         return $mappedStatus;
+    }
+    if ($mappedStatus === 'done') {
+        return 'done';
     }
     if ($approval !== null && in_array($localStatus, ['in_progress', 'awaiting_feedback'], true)) {
         return 'feedback_received';
@@ -141,7 +148,8 @@ $app->get('/api/planio/sync', function (Request $request, Response $response): R
             if ($row) {
                 // title/project/due_date/deploy_approval always track Plan.io.
                 // status is developer-owned once past 'new' (see resolvePlanioStatus),
-                // except a deploy approval nudges awaiting_feedback → feedback_received.
+                // except: a resolved/closed ticket forces 'done', and a deploy
+                // approval nudges in-flight tasks → feedback_received.
                 $newStatus = resolvePlanioStatus($row['status'], $mappedStatus, $approval);
                 $db->prepare(
                     'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, deploy_approval = ?, status = ? WHERE planio_issue_id = ?'

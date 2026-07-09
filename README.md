@@ -152,9 +152,12 @@ Use **Test Connection** to verify the key. Then **Sync Plan.io** from the header
 Sync behavior:
 
 - New issues (no matching `planio_issue_id`) are inserted with status `new`.
-- Existing issues update **only** `title`, `project`, and `due_date` — your **local status is
-  never overwritten**. You own status locally.
-- Sync never deletes tasks; issues closed in Plan.io are simply ignored.
+- Existing issues update `title`, `project`, `assignee`, `due_date`, and deploy approval. You own
+  status locally, so it's preserved — with two exceptions:
+  - An issue **resolved, closed, or done** in Plan.io forces the task to `done` (a `rejected`
+    issue does not).
+  - A **deploy approval** (staging or production) nudges an in-flight task to `feedback_received`.
+- Sync never deletes tasks.
 
 ---
 
