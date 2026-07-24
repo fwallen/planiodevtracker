@@ -64,6 +64,15 @@ document.addEventListener('alpine:init', () => {
       if (this.detail === id) this.detail = null;
     },
 
+    // Pulls a task off the board without deleting it. A later Plan.io re-import
+    // or a status change on the RM re-enables tracking server-side and brings
+    // it back (see routes/planio.php), so this is not permanent for RM-linked tasks.
+    async stopTracking(id) {
+      await api.patch('/tasks/' + id, { tracking_enabled: false });
+      this.items = this.items.filter(t => t.id !== id);
+      if (this.detail === id) this.detail = null;
+    },
+
     async sendFeedback(id, note, handedTo) {
       await api.post('/tasks/' + id + '/send-feedback', { note, handed_to: handedTo });
       await this.openDetail(id);

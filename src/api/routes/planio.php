@@ -106,8 +106,11 @@ $app->post('/api/planio/import', function (Request $request, Response $response)
         $created = !$row;
         if ($row) {
             $newStatus = resolvePlanioStatus($row['status'], $mappedStatus, $approval);
+            // A manual import is an explicit ask to bring this RM back onto the
+            // board, so it always clears tracking_enabled — even if nothing else
+            // about the RM changed.
             $db->prepare(
-                'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, deploy_approval = ?, status = ? WHERE planio_issue_id = ?'
+                'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, deploy_approval = ?, status = ?, tracking_enabled = 1 WHERE planio_issue_id = ?'
             )->execute([$title, $project, $assignee, $dueDate, $approval, $newStatus, $planioId]);
         } else {
             $db->prepare(
@@ -142,7 +145,7 @@ $app->get('/api/planio/sync', function (Request $request, Response $response): R
             $mappedStatus  = mapPlanioStatus($planioStatus);
             $approval      = mapPlanioApproval($planioStatus);
 
-            $existing = $db->prepare('SELECT id, status FROM tasks WHERE planio_issue_id = ?');
+            $existing = $db->prepare('SELECT id, status, tracking_enabled FROM tasks WHERE planio_issue_id = ?');
             $existing->execute([$planioId]);
             $row = $existing->fetch(\PDO::FETCH_ASSOC);
 
@@ -152,9 +155,12 @@ $app->get('/api/planio/sync', function (Request $request, Response $response): R
                 // except: a resolved/closed ticket forces 'done', and a deploy
                 // approval nudges in-flight tasks → feedback_received.
                 $newStatus = resolvePlanioStatus($row['status'], $mappedStatus, $approval);
+                // A real status change on the RM re-surfaces a task the developer
+                // stopped tracking; a mere title/project refresh does not.
+                $trackingEnabled = $newStatus !== $row['status'] ? 1 : (int)$row['tracking_enabled'];
                 $db->prepare(
-                    'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, deploy_approval = ?, status = ? WHERE planio_issue_id = ?'
-                )->execute([$title, $project, $assignee, $dueDate, $approval, $newStatus, $planioId]);
+                    'UPDATE tasks SET title = ?, project = ?, assignee = ?, due_date = ?, deploy_approval = ?, status = ?, tracking_enabled = ? WHERE planio_issue_id = ?'
+                )->execute([$title, $project, $assignee, $dueDate, $approval, $newStatus, $trackingEnabled, $planioId]);
                 $updated++;
             } else {
                 $db->prepare(
@@ -188,7 +194,9 @@ $app->get('/api/planio/sync', function (Request $request, Response $response): R
                 continue; // deleted or inaccessible upstream — leave local state alone
             }
             if (mapPlanioStatus($issue['status']['name'] ?? '') === 'done') {
-                $db->prepare('UPDATE tasks SET status = ? WHERE id = ?')->execute(['done', $task['id']]);
+                // Landing in done is a status change too — re-surface it so it's
+                // visible in the Done column rather than silently staying hidden.
+                $db->prepare('UPDATE tasks SET status = ?, tracking_enabled = 1 WHERE id = ?')->execute(['done', $task['id']]);
                 $updated++;
             }
         }

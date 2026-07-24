@@ -12,10 +12,10 @@ $app->group('/api/tasks', function (RouteCollectorProxy $group) {
         $db = Database::get();
         $params = $request->getQueryParams();
 
-        $sql = 'SELECT * FROM tasks';
+        $sql = 'SELECT * FROM tasks WHERE tracking_enabled = 1';
         $bindings = [];
         if (!empty($params['status'])) {
-            $sql .= ' WHERE status = ?';
+            $sql .= ' AND status = ?';
             $bindings[] = $params['status'];
         }
         $sql .= ' ORDER BY sort_order ASC, priority DESC, due_date ASC, created_at ASC';
@@ -108,14 +108,14 @@ $app->group('/api/tasks', function (RouteCollectorProxy $group) {
     $group->patch('/{id}', function (Request $request, Response $response, array $args): Response {
         $db = Database::get();
         $body = (array)$request->getParsedBody();
-        $allowed = ['title', 'project', 'requester', 'status', 'priority', 'due_date', 'notes'];
+        $allowed = ['title', 'project', 'requester', 'status', 'priority', 'due_date', 'notes', 'tracking_enabled'];
         $sets = [];
         $values = [];
 
         foreach ($allowed as $field) {
             if (array_key_exists($field, $body)) {
                 $sets[] = "$field = ?";
-                $values[] = $body[$field];
+                $values[] = $field === 'tracking_enabled' ? (int)(bool)$body[$field] : $body[$field];
             }
         }
 

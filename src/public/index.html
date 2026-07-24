@@ -118,8 +118,11 @@
             <template x-for="task in tasksFor(col.status)" :key="task.id">
               <div x-data="taskCard(task)" @click="open()" :data-task-id="task.id" class="task-card cursor-grab active:cursor-grabbing">
                 <!-- Card markup injected by taskCard component -->
-                <div :class="cardClass()" class="rounded-md border p-2.5 hover:shadow transition text-sm">
-                  <div class="font-medium leading-snug mb-1" x-text="task.title"></div>
+                <div :class="cardClass()" class="relative group rounded-md border p-2.5 hover:shadow transition text-sm">
+                  <button @click.stop="$store.tasks.stopTracking(task.id)"
+                          title="Stop tracking — hides this card until Plan.io re-imports or updates it"
+                          class="absolute top-1 right-1 leading-none text-xs text-gray-300 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition px-1">⊘</button>
+                  <div class="font-medium leading-snug mb-1 pr-4" x-text="task.title"></div>
                   <div class="flex items-center gap-2 text-xs text-gray-400">
                     <span x-show="task.project" x-text="task.project"></span>
                     <span x-show="task.requester" x-text="'← ' + task.requester"></span>
