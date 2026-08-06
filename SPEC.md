@@ -124,6 +124,7 @@ volumes:
 CREATE TABLE tasks (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   planio_issue_id INT DEFAULT NULL,          -- null if manually created
+  planio_status   VARCHAR(64) DEFAULT NULL,  -- raw Plan.io status name as of the last sync; null = never recorded
   title           VARCHAR(500) NOT NULL,
   project         VARCHAR(255) DEFAULT NULL,
   requester       VARCHAR(255) DEFAULT NULL,
@@ -231,20 +232,51 @@ to it on sync/import; otherwise the developer sets it locally.
 - Calls Plan.io REST API: `GET /issues.json?assigned_to_id=me&status_id=open`
 - For each returned issue:
   - If `planio_issue_id` does not exist in `tasks` → insert as `status = 'new'`
-  - If it already exists → update `title`, `project`, `assignee`, `due_date`, and `deploy_approval`;
-    local `status` is developer-owned and preserved, **except** for the two overrides below
+  - If it already exists → update `title`, `project`, `assignee`, `due_date`, `deploy_approval`, and
+    `planio_status`; local `status` is developer-owned and preserved, **except** for the three
+    overrides below
+- **Tracked fields live in one place.** Sync has two write paths — issues present in the payload, and
+  tracked tasks that dropped out of it (below) — plus manual import. All three refresh a task through
+  the same helper, so no path can track a narrower set of columns than another. This is not
+  incidental tidiness: when the drop-out pass kept its own shorter column list, a task assigned away
+  from the developer held a stale `assignee` and `title` for as long as it stayed away — i.e. exactly
+  the RM most likely to be edited by someone else was the one refreshed least.
 - **Status overrides** (a locally-owned status is only clobbered in these cases):
   - A Plan.io **terminal** status (`resolved`, `closed`, or `done`) forces the task to `done`,
     regardless of its local state — the ticket is finished, so the card lands in Done. (`rejected`
     is *not* terminal and does not override.) Because the sync query is `status_id=open`, a ticket
-    resolved/closed upstream never appears in the payload; sync detects this by re-fetching each
-    still-active tracked task that dropped out of the open set and applying the terminal rule. (A
-    task that merely got reassigned away while still open maps to a non-terminal status and is left
-    untouched.)
+    resolved/closed upstream never appears in the payload; sync detects this by re-fetching every
+    tracked task that is not yet `done` and dropped out of the open set, then applying the terminal
+    rule. This covers **every** board queue, `on_hold` included — a parked ticket resolved upstream
+    would otherwise sit in On Hold forever. (A task that merely got reassigned away while still open
+    maps to a non-terminal status, so its *status* is left alone — but its tracked fields are still
+    refreshed, so its assignee and title stay correct while it sits with someone else.)
   - A Plan.io **deploy approval** (`approved for staging` / `approved for production`) nudges an
     in-flight task (`in_progress` or `awaiting_feedback`) to `feedback_received`, since an approval
     means the requester has responded.
-- `on_hold` is never overridden by sync.
+  - A **hand-back** moves an `awaiting_feedback` task to `feedback_received`: the RM was in Plan.io's
+    `Feedback` state at the previous sync and has since moved out of it, so the requester has
+    answered and the ball is back with the developer. Moving upstream to `On hold` is *not* a
+    hand-back (nobody answered — the ticket was parked) and leaves the card waiting.
+    - The rule is gated on `tasks.planio_status`, the raw Plan.io status name recorded on the last
+      sync, **not** on the current status alone. Sending for feedback from the app while the RM
+      still sits in `In Progress` upstream is common (the hand-off may be a PR review or a Slack
+      thread rather than a Plan.io reassignment); keying on the current status alone would bounce
+      such a card straight back to `feedback_received` on the next sync and destroy its
+      days-blocked tracking.
+    - A `NULL` `planio_status` means "never recorded" and never nudges. The column is intentionally
+      not backfilled: a task in `awaiting_feedback` has *not* necessarily been in Plan.io's
+      `Feedback` state, so a guessed value would fabricate hand-backs. The next sync records the
+      real status and hand-backs are detected from then on.
+    - Because a task waiting on a requester is typically assigned away from the developer, it falls
+      out of the `assigned_to_id=me` payload — so the drop-out reconcile pass applies the full
+      override set, not just the terminal rule, or a hand-back without a reassignment would never
+      be noticed.
+- `on_hold` is never overridden by the deploy-approval nudge or the hand-back rule — a parked task
+  stays parked. It *is* subject to the terminal-status rule above, so an On Hold ticket
+  resolved/closed in Plan.io moves to `done`.
+- A hand-back does **not** touch `feedback_rounds` or `last_sent_at`; those belong to transitions
+  *into* `awaiting_feedback` (see the feedback invariant).
 - Sync does **not** delete tasks that are no longer in Plan.io (they may have been closed)
 
 ### Import Behavior (single issue)

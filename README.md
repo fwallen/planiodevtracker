@@ -153,10 +153,23 @@ Sync behavior:
 
 - New issues (no matching `planio_issue_id`) are inserted with status `new`.
 - Existing issues update `title`, `project`, `assignee`, `due_date`, and deploy approval. You own
-  status locally, so it's preserved — with two exceptions:
+  status locally, so it's preserved — with three exceptions:
   - An issue **resolved, closed, or done** in Plan.io forces the task to `done` (a `rejected`
-    issue does not).
+    issue does not). This applies from **any** column, On Hold included: because Plan.io's own
+    sync query only returns open issues, a resolved ticket vanishes from the payload rather than
+    arriving marked resolved, so sync re-checks every not-yet-done task that went missing and
+    moves the finished ones to Done.
   - A **deploy approval** (staging or production) nudges an in-flight task to `feedback_received`.
+    A parked (On Hold) task is left parked.
+  - A **hand-back** moves an Awaiting Feedback card to Feedback Received: the RM was in Plan.io's
+    `Feedback` state at the last sync and has since moved out of it, so the requester has answered.
+    Moving upstream to `On hold` doesn't count — nobody answered, the ticket was parked.
+
+    This is deliberately based on the *change* in Plan.io status (remembered in `tasks.planio_status`),
+    not on the current status. If you send for feedback from the app but leave the RM in
+    `In Progress` — because you handed it off via a PR review or Slack instead — the card keeps
+    waiting and its days-blocked count stays intact. A task whose Plan.io status has never been
+    recorded yet is never nudged; the next sync records it and hand-backs work from then on.
 - Sync never deletes tasks.
 
 ---
@@ -191,11 +204,26 @@ src/
 └── api/                    # Slim app — sits OUTSIDE the document root
     ├── public/index.php    # Slim bootstrap + route wiring
     ├── routes/             # tasks.php, feedback.php, planio.php, settings.php
+    ├── planio_mapping.php   # pure Plan.io ⇄ local field + status rules (no DB/HTTP)
     ├── services/PlanioService.php
     ├── db/Database.php      # PDO singleton
     ├── migrations/          # Phoenix migrations
+    ├── tools/               # runnable checks, e.g. test_planio_mapping.php
     └── composer.json
 ```
+
+The Plan.io mapping rules — which columns a task takes from an issue, and how a Plan.io status
+resolves against your local one — live in `planio_mapping.php` rather than in the route, so they can
+be exercised without booting Slim:
+
+```bash
+docker compose exec -T app php /var/www/api/tools/test_planio_mapping.php
+```
+
+Sync has two write paths (issues in the payload, and tracked tasks that dropped out of it) plus
+manual import. All three refresh a task through the same `updateTaskFromIssue()` helper in
+`routes/planio.php` — keep it that way. Each time those paths kept their own column list, the
+narrower one silently stranded data.
 
 Apache routes `/api/*` to the Slim app; everything else falls through to the SPA shell.
 
